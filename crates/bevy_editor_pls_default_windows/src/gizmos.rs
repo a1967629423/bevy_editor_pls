@@ -5,24 +5,26 @@ use bevy::{
 };
 
 use bevy_editor_pls_core::editor_window::{EditorWindow, EditorWindowContext};
-use bevy_inspector_egui::{bevy_inspector::hierarchy::SelectedEntities, egui};
+use bevy_inspector_egui::egui;
 use transform_gizmo_egui::{GizmoExt, GizmoMode};
 
 use crate::{
-    cameras::{ActiveEditorCamera, CameraWindow, EditorCamera, EDITOR_RENDER_LAYER},
+    cameras::{ActiveEditorCamera, EditorCamera, EDITOR_RENDER_LAYER},
     hierarchy::HierarchyWindow,
 };
 
 pub struct GizmoState {
     pub camera_gizmo_active: bool,
-    pub gizmo_mode: GizmoMode,
+    pub gizmo_mode: transform_gizmo_egui::EnumSet<transform_gizmo_egui::GizmoMode>,
+    pub gizmo: transform_gizmo_egui::Gizmo,
 }
 
 impl Default for GizmoState {
     fn default() -> Self {
         Self {
             camera_gizmo_active: true,
-            gizmo_mode: GizmoMode::Translate,
+            gizmo: transform_gizmo_egui::Gizmo::default(),
+            gizmo_mode: transform_gizmo_egui::EnumSet::only(GizmoMode::Translate),
         }
     }
 }
@@ -38,15 +40,30 @@ impl EditorWindow for GizmoWindow {
         ui.label("Gizmos can currently not be configured");
     }
 
-    fn viewport_toolbar_ui(world: &mut World, cx: EditorWindowContext, ui: &mut egui::Ui) {
-        let gizmo_state = cx.state::<GizmoWindow>().unwrap();
+    fn viewport_toolbar_ui(world: &mut World, mut cx: EditorWindowContext, ui: &mut egui::Ui) {
+        let (camera_gizmo_active, gizmo_mode) = {
+            let GizmoState {
+                camera_gizmo_active,
+                gizmo_mode,
+                ..
+            } = cx.state::<GizmoWindow>().unwrap();
+            (*camera_gizmo_active, *gizmo_mode)
+        };
 
-        if gizmo_state.camera_gizmo_active {
-            if let (Some(hierarchy_state), Some(_camera_state)) =
-                (cx.state::<HierarchyWindow>(), cx.state::<CameraWindow>())
-            {
-                draw_gizmo(ui, world, &hierarchy_state.selected, gizmo_state.gizmo_mode);
+        if camera_gizmo_active {
+            if let Some(new_config) = collect_gizmo_config(ui, world, gizmo_mode) {
+                cx.state_mut::<GizmoWindow>()
+                    .unwrap()
+                    .gizmo
+                    .update_config(new_config);
             }
+            let selected_entities = cx
+                .state::<HierarchyWindow>()
+                .unwrap()
+                .selected.iter().collect::<Vec<_>>();
+
+            let gizmo_state_mut = cx.state_mut::<GizmoWindow>().unwrap();
+            draw_gizmo(ui, world, &selected_entities, &mut gizmo_state_mut.gizmo);
         }
     }
 
@@ -172,80 +189,68 @@ fn convert_array_f32_to_f64<const N: usize>(a: &[f32; N]) -> [f64; N] {
     }
     result
 }
-
-fn draw_gizmo(
+fn collect_gizmo_config(
     ui: &mut egui::Ui,
     world: &mut World,
-    selected_entities: &SelectedEntities,
-    gizmo_mode: GizmoMode,
-) {
-    let Ok((cam_transform, projection,camera)) = world
-        .query_filtered::<(&GlobalTransform, &Projection,&Camera), With<ActiveEditorCamera>>()
+    gizmo_mode: transform_gizmo_egui::EnumSet<transform_gizmo_egui::GizmoMode>,
+) -> Option<transform_gizmo_egui::GizmoConfig> {
+    let (cam_transform, projection) = world
+        .query_filtered::<(&GlobalTransform, &Projection), With<ActiveEditorCamera>>()
         .get_single(world)
-    else {
-        return;
-    };
-    
-    let Some((viewport_min,viewport_size)) = camera.viewport.as_ref().map(|viewport| {
-        let min = transform_gizmo_egui::math::Pos2::new(viewport.physical_position.x as f32, viewport.physical_position.y as f32);
-        let size = transform_gizmo_egui::math::Vec2::new(viewport.physical_size.x as f32, viewport.physical_size.y as f32);
-        (min,size)
-    }) else {
-        return;
-    };
+        .ok()?;
     let view_matrix = Mat4::from(cam_transform.affine().inverse());
     let projection_matrix = projection.get_projection_matrix();
 
-    if selected_entities.len() != 1 {
-        return;
-    }
-
-    for selected in selected_entities.iter() {
-        let Some(global_transform) = world.get::<GlobalTransform>(selected) else {
-            continue;
+    let transform_view_matrix = transform_gizmo_egui::math::DMat4::from_cols_array(
+        &convert_array_f32_to_f64(&view_matrix.to_cols_array()),
+    );
+    let transform_projection_matrix = transform_gizmo_egui::math::DMat4::from_cols_array(
+        &convert_array_f32_to_f64(&projection_matrix.to_cols_array()),
+    );
+    Some(transform_gizmo_egui::GizmoConfig {
+        modes: gizmo_mode,
+        viewport: ui.clip_rect(),
+        orientation: transform_gizmo_egui::GizmoOrientation::Local,
+        view_matrix: transform_view_matrix.into(),
+        projection_matrix: transform_projection_matrix.into(),
+        ..Default::default()
+    })
+}
+fn draw_gizmo(
+    ui: &mut egui::Ui,
+    world: &mut World,
+    selected_entities: &[Entity],
+    gizmo: &mut transform_gizmo_egui::Gizmo,
+) {
+    let all_transform_and_entity = selected_entities.iter().filter_map(|selected| {
+        let Some(global_transform) = world.get::<GlobalTransform>(*selected) else {
+            return None;
         };
-
+    
         let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
-
-        let gizmo_transform =
-            transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
-                transform_gizmo_egui::mint::Vector3::from_slice(&convert_array_f32_to_f64(
-                    &scale.to_array(),
-                )),
-                transform_gizmo_egui::mint::Quaternion::from(convert_array_f32_to_f64(
-                    &rotation.to_array(),
-                )),
-                transform_gizmo_egui::mint::Vector3::from_slice(&convert_array_f32_to_f64(
-                    &translation.to_array(),
-                )),
-            );
-        let transform_view_matrix = transform_gizmo_egui::math::DMat4::from_cols_array(
-            &convert_array_f32_to_f64(&view_matrix.to_cols_array()),
+    
+        let gizmo_transform = transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
+            transform_gizmo_egui::mint::Vector3::from_slice(&convert_array_f32_to_f64(
+                &scale.to_array(),
+            )),
+            transform_gizmo_egui::mint::Quaternion::from(convert_array_f32_to_f64(
+                &rotation.to_array(),
+            )),
+            transform_gizmo_egui::mint::Vector3::from_slice(&convert_array_f32_to_f64(
+                &translation.to_array(),
+            )),
         );
-        let transform_projection_matrix = transform_gizmo_egui::math::DMat4::from_cols_array(
-            &convert_array_f32_to_f64(&projection_matrix.to_cols_array()),
-        );
+        Some((gizmo_transform, *selected))
+    }).collect::<Vec<_>>();
 
+    let all_transform = all_transform_and_entity.iter().map(|(transform,_)|transform.clone()).collect::<Vec<_>>();
+    let Some((_, transforms)) = gizmo.interact(ui,& all_transform) else {
+        return;
+    };
 
-        let Some((_, transforms)) =
-            transform_gizmo_egui::Gizmo::new(transform_gizmo_egui::GizmoConfig {
-                modes: transform_gizmo_egui::enum_set!(gizmo_mode),
-                viewport: transform_gizmo_egui::Rect::from_min_size(viewport_min, viewport_size),
-                orientation: transform_gizmo_egui::GizmoOrientation::Local,
-                view_matrix: transform_view_matrix.into(),
-                projection_matrix: transform_projection_matrix.into(),
-                ..Default::default()
-            })
-            .interact(ui, &[gizmo_transform])
-        else {
-            continue;
-        };
-        let result = transforms[0];
-
-        let global_affine = global_transform.affine();
-
-        let mut transform = world.get_mut::<Transform>(selected).unwrap();
-
+    for ((_,entity), result) in all_transform_and_entity.iter().zip(transforms.iter()) {
+        let global_affine = world.get::<GlobalTransform>(*entity).unwrap().affine();
+        let mut transform = world.get_mut::<Transform>(*entity).unwrap();
         let parent_affine = global_affine * transform.compute_affine().inverse();
         let inverse_parent_transform = GlobalTransform::from(parent_affine.inverse());
         let transform_gizmo_egui::math::Transform {
@@ -253,7 +258,6 @@ fn draw_gizmo(
             translation,
             rotation,
         } = result;
-
         let global_transform = Transform {
             scale: Vec3::new(scale.x as f32, scale.y as f32, scale.z as f32),
             translation: Vec3::new(
@@ -268,7 +272,7 @@ fn draw_gizmo(
                 rotation.s as f32,
             ),
         };
-
         *transform = (inverse_parent_transform * global_transform).into();
     }
+
 }
