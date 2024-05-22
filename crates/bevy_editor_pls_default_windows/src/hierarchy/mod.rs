@@ -146,7 +146,6 @@ impl<'a> Hierarchy<'a> {
     fn show(&mut self, ui: &mut egui::Ui) -> bool {
         let mut despawn_recursive = None;
         let mut despawn = None;
-
         let HierarchyState {
             selected,
             rename_info,
@@ -174,6 +173,11 @@ impl<'a> Hierarchy<'a> {
                         current_rename: entity_name,
                     });
                     ui.close_menu();
+                }
+
+                if ui.button("Add child entity").clicked() {
+                    let empty_child = world.spawn(()).id();
+                    world.entity_mut(entity).add_child(empty_child);
                 }
 
                 if let Some(add_state) = self.add_state {
