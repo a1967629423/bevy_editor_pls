@@ -60,7 +60,9 @@ impl EditorWindow for GizmoWindow {
             let selected_entities = cx
                 .state::<HierarchyWindow>()
                 .unwrap()
-                .selected.iter().collect::<Vec<_>>();
+                .selected
+                .iter()
+                .collect::<Vec<_>>();
 
             let gizmo_state_mut = cx.state_mut::<GizmoWindow>().unwrap();
             draw_gizmo(ui, world, &selected_entities, &mut gizmo_state_mut.gizmo);
@@ -222,33 +224,40 @@ fn draw_gizmo(
     selected_entities: &[Entity],
     gizmo: &mut transform_gizmo_egui::Gizmo,
 ) {
-    let all_transform_and_entity = selected_entities.iter().filter_map(|selected| {
-        let Some(global_transform) = world.get::<GlobalTransform>(*selected) else {
-            return None;
-        };
-    
-        let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
-    
-        let gizmo_transform = transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
-            transform_gizmo_egui::mint::Vector3::from_slice(&convert_array_f32_to_f64(
-                &scale.to_array(),
-            )),
-            transform_gizmo_egui::mint::Quaternion::from(convert_array_f32_to_f64(
-                &rotation.to_array(),
-            )),
-            transform_gizmo_egui::mint::Vector3::from_slice(&convert_array_f32_to_f64(
-                &translation.to_array(),
-            )),
-        );
-        Some((gizmo_transform, *selected))
-    }).collect::<Vec<_>>();
+    let all_transform_and_entity = selected_entities
+        .iter()
+        .filter_map(|selected| {
+            let Some(global_transform) = world.get::<GlobalTransform>(*selected) else {
+                return None;
+            };
 
-    let all_transform = all_transform_and_entity.iter().map(|(transform,_)|transform.clone()).collect::<Vec<_>>();
-    let Some((_, transforms)) = gizmo.interact(ui,& all_transform) else {
+            let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
+
+            let gizmo_transform =
+                transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
+                    transform_gizmo_egui::mint::Vector3::from_slice(&convert_array_f32_to_f64(
+                        &scale.to_array(),
+                    )),
+                    transform_gizmo_egui::mint::Quaternion::from(convert_array_f32_to_f64(
+                        &rotation.to_array(),
+                    )),
+                    transform_gizmo_egui::mint::Vector3::from_slice(&convert_array_f32_to_f64(
+                        &translation.to_array(),
+                    )),
+                );
+            Some((gizmo_transform, *selected))
+        })
+        .collect::<Vec<_>>();
+
+    let all_transform = all_transform_and_entity
+        .iter()
+        .map(|(transform, _)| transform.clone())
+        .collect::<Vec<_>>();
+    let Some((_, transforms)) = gizmo.interact(ui, &all_transform) else {
         return;
     };
 
-    for ((_,entity), result) in all_transform_and_entity.iter().zip(transforms.iter()) {
+    for ((_, entity), result) in all_transform_and_entity.iter().zip(transforms.iter()) {
         let global_affine = world.get::<GlobalTransform>(*entity).unwrap().affine();
         let mut transform = world.get_mut::<Transform>(*entity).unwrap();
         let parent_affine = global_affine * transform.compute_affine().inverse();
@@ -274,5 +283,4 @@ fn draw_gizmo(
         };
         *transform = (inverse_parent_transform * global_transform).into();
     }
-
 }

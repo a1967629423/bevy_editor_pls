@@ -240,7 +240,8 @@ pub fn editor_controls_system(
             editor
                 .window_state_mut::<bevy_editor_pls_default_windows::gizmos::GizmoWindow>()
                 .unwrap()
-                .gizmo_mode = transform_gizmo_egui::EnumSet::only(transform_gizmo_egui::GizmoMode::Translate);
+                .gizmo_mode =
+                transform_gizmo_egui::EnumSet::only(transform_gizmo_egui::GizmoMode::Translate);
         }
         if controls.just_pressed(
             Action::SetGizmoModeRotate,
@@ -251,7 +252,8 @@ pub fn editor_controls_system(
             editor
                 .window_state_mut::<bevy_editor_pls_default_windows::gizmos::GizmoWindow>()
                 .unwrap()
-                .gizmo_mode = transform_gizmo_egui::EnumSet::only(transform_gizmo_egui::GizmoMode::Rotate);
+                .gizmo_mode =
+                transform_gizmo_egui::EnumSet::only(transform_gizmo_egui::GizmoMode::Rotate);
         }
         if controls.just_pressed(
             Action::SetGizmoModeScale,
@@ -262,7 +264,8 @@ pub fn editor_controls_system(
             editor
                 .window_state_mut::<bevy_editor_pls_default_windows::gizmos::GizmoWindow>()
                 .unwrap()
-                .gizmo_mode = transform_gizmo_egui::EnumSet::only(transform_gizmo_egui::GizmoMode::Scale);
+                .gizmo_mode =
+                transform_gizmo_egui::EnumSet::only(transform_gizmo_egui::GizmoMode::Scale);
         }
     }
 }
