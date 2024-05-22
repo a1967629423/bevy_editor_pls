@@ -179,10 +179,18 @@ fn draw_gizmo(
     selected_entities: &SelectedEntities,
     gizmo_mode: GizmoMode,
 ) {
-    let Ok((cam_transform, projection)) = world
-        .query_filtered::<(&GlobalTransform, &Projection), With<ActiveEditorCamera>>()
+    let Ok((cam_transform, projection,camera)) = world
+        .query_filtered::<(&GlobalTransform, &Projection,&Camera), With<ActiveEditorCamera>>()
         .get_single(world)
     else {
+        return;
+    };
+    
+    let Some((viewport_min,viewport_size)) = camera.viewport.as_ref().map(|viewport| {
+        let min = transform_gizmo_egui::math::Pos2::new(viewport.physical_position.x as f32, viewport.physical_position.y as f32);
+        let size = transform_gizmo_egui::math::Vec2::new(viewport.physical_size.x as f32, viewport.physical_size.y as f32);
+        (min,size)
+    }) else {
         return;
     };
     let view_matrix = Mat4::from(cam_transform.affine().inverse());
@@ -196,6 +204,7 @@ fn draw_gizmo(
         let Some(global_transform) = world.get::<GlobalTransform>(selected) else {
             continue;
         };
+
         let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
 
         let gizmo_transform =
@@ -217,9 +226,11 @@ fn draw_gizmo(
             &convert_array_f32_to_f64(&projection_matrix.to_cols_array()),
         );
 
+
         let Some((_, transforms)) =
             transform_gizmo_egui::Gizmo::new(transform_gizmo_egui::GizmoConfig {
                 modes: transform_gizmo_egui::enum_set!(gizmo_mode),
+                viewport: transform_gizmo_egui::Rect::from_min_size(viewport_min, viewport_size),
                 orientation: transform_gizmo_egui::GizmoOrientation::Local,
                 view_matrix: transform_view_matrix.into(),
                 projection_matrix: transform_projection_matrix.into(),
