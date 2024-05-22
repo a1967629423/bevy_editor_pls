@@ -227,9 +227,7 @@ fn draw_gizmo(
     let all_transform_and_entity = selected_entities
         .iter()
         .filter_map(|selected| {
-            let Some(global_transform) = world.get::<GlobalTransform>(*selected) else {
-                return None;
-            };
+            let global_transform = world.get::<GlobalTransform>(*selected)?;
 
             let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
 
@@ -251,7 +249,7 @@ fn draw_gizmo(
 
     let all_transform = all_transform_and_entity
         .iter()
-        .map(|(transform, _)| transform.clone())
+        .map(|(transform, _)| *transform)
         .collect::<Vec<_>>();
     let Some((_, transforms)) = gizmo.interact(ui, &all_transform) else {
         return;
