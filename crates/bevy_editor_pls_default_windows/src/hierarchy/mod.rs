@@ -178,6 +178,7 @@ impl<'a> Hierarchy<'a> {
                 if ui.button("Add child entity").clicked() {
                     let empty_child = world.spawn(()).id();
                     world.entity_mut(entity).add_child(empty_child);
+                    ui.close_menu();
                 }
 
                 if let Some(add_state) = self.add_state {
