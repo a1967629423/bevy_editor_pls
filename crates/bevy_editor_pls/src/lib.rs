@@ -11,7 +11,7 @@ use bevy::{
 
 pub use bevy_editor_pls_core::egui_dock;
 #[doc(inline)]
-pub use bevy_editor_pls_core::{editor, editor_window, AddEditorWindow};
+pub use bevy_editor_pls_core::{bevy_inspector_egui, editor, editor_window, AddEditorWindow};
 pub use egui;
 
 #[cfg(feature = "default_windows")]

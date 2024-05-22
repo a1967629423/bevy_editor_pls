@@ -6,7 +6,7 @@ use bevy::{
 
 use bevy_editor_pls_core::editor_window::{EditorWindow, EditorWindowContext};
 use bevy_inspector_egui::{bevy_inspector::hierarchy::SelectedEntities, egui};
-use egui_gizmo::GizmoMode;
+use transform_gizmo_egui::{GizmoExt, GizmoMode};
 
 use crate::{
     cameras::{ActiveEditorCamera, CameraWindow, EditorCamera, EDITOR_RENDER_LAYER},
@@ -165,6 +165,13 @@ fn add_gizmo_markers(
             });
     }
 }
+fn convert_array_f32_to_f64<const N: usize>(a: &[f32; N]) -> [f64; N] {
+    let mut result = [0.0; N];
+    for i in 0..N {
+        result[i] = a[i] as f64;
+    }
+    result
+}
 
 fn draw_gizmo(
     ui: &mut egui::Ui,
@@ -189,18 +196,40 @@ fn draw_gizmo(
         let Some(global_transform) = world.get::<GlobalTransform>(selected) else {
             continue;
         };
-        let model_matrix = global_transform.compute_matrix();
+        let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
 
-        let Some(result) = egui_gizmo::Gizmo::new(selected)
-            .model_matrix(model_matrix.into())
-            .view_matrix(view_matrix.into())
-            .projection_matrix(projection_matrix.into())
-            .orientation(egui_gizmo::GizmoOrientation::Local)
-            .mode(gizmo_mode)
-            .interact(ui)
+        let gizmo_transform =
+            transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
+                transform_gizmo_egui::mint::Vector3::from_slice(&convert_array_f32_to_f64(
+                    &scale.to_array(),
+                )),
+                transform_gizmo_egui::mint::Quaternion::from(convert_array_f32_to_f64(
+                    &rotation.to_array(),
+                )),
+                transform_gizmo_egui::mint::Vector3::from_slice(&convert_array_f32_to_f64(
+                    &translation.to_array(),
+                )),
+            );
+        let transform_view_matrix = transform_gizmo_egui::math::DMat4::from_cols_array(
+            &convert_array_f32_to_f64(&view_matrix.to_cols_array()),
+        );
+        let transform_projection_matrix = transform_gizmo_egui::math::DMat4::from_cols_array(
+            &convert_array_f32_to_f64(&projection_matrix.to_cols_array()),
+        );
+
+        let Some((_, transforms)) =
+            transform_gizmo_egui::Gizmo::new(transform_gizmo_egui::GizmoConfig {
+                modes: transform_gizmo_egui::enum_set!(gizmo_mode),
+                orientation: transform_gizmo_egui::GizmoOrientation::Local,
+                view_matrix: transform_view_matrix.into(),
+                projection_matrix: transform_projection_matrix.into(),
+                ..Default::default()
+            })
+            .interact(ui, &[gizmo_transform])
         else {
             continue;
         };
+        let result = transforms[0];
 
         let global_affine = global_transform.affine();
 
@@ -208,11 +237,25 @@ fn draw_gizmo(
 
         let parent_affine = global_affine * transform.compute_affine().inverse();
         let inverse_parent_transform = GlobalTransform::from(parent_affine.inverse());
+        let transform_gizmo_egui::math::Transform {
+            scale,
+            translation,
+            rotation,
+        } = result;
 
         let global_transform = Transform {
-            translation: result.translation.into(),
-            rotation: result.rotation.into(),
-            scale: result.scale.into(),
+            scale: Vec3::new(scale.x as f32, scale.y as f32, scale.z as f32),
+            translation: Vec3::new(
+                translation.x as f32,
+                translation.y as f32,
+                translation.z as f32,
+            ),
+            rotation: Quat::from_xyzw(
+                rotation.v.x as f32,
+                rotation.v.y as f32,
+                rotation.v.z as f32,
+                rotation.s as f32,
+            ),
         };
 
         *transform = (inverse_parent_transform * global_transform).into();

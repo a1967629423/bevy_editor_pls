@@ -16,6 +16,7 @@ use bevy_inspector_egui::{
 use editor::EditorInternalState;
 use editor_window::EditorWindow;
 
+pub use bevy_inspector_egui;
 pub use editor::{Editor, EditorEvent};
 
 /// Re-export of [`egui_dock`]
