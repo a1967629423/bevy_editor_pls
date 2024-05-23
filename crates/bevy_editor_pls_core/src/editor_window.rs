@@ -22,6 +22,11 @@ pub trait EditorWindow: 'static {
             ui.close_menu();
         }
     }
+
+    fn editor_menu_ui(world: &mut World, cx: EditorWindowContext, ui: &mut egui::Ui) {
+        let _ = (world, cx, ui);
+    }
+
     /// Ui shown in the viewport toolbar.
     fn viewport_toolbar_ui(world: &mut World, cx: EditorWindowContext, ui: &mut egui::Ui) {
         let _ = (world, cx, ui);

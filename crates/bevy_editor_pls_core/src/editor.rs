@@ -108,6 +108,7 @@ struct EditorWindowData {
     name: &'static str,
     ui_fn: UiFn,
     menu_ui_fn: UiFn,
+    editor_menu_ui_fn: UiFn,
     viewport_toolbar_ui_fn: UiFn,
     viewport_ui_fn: UiFn,
     default_size: (f32, f32),
@@ -222,6 +223,13 @@ fn ui_fn<W: EditorWindow>(world: &mut World, cx: EditorWindowContext, ui: &mut e
 fn menu_ui_fn<W: EditorWindow>(world: &mut World, cx: EditorWindowContext, ui: &mut egui::Ui) {
     W::menu_ui(world, cx, ui);
 }
+fn editor_menu_ui_fn<W: EditorWindow>(
+    world: &mut World,
+    cx: EditorWindowContext,
+    ui: &mut egui::Ui,
+) {
+    W::editor_menu_ui(world, cx, ui);
+}
 fn viewport_toolbar_ui_fn<W: EditorWindow>(
     world: &mut World,
     cx: EditorWindowContext,
@@ -238,11 +246,13 @@ impl Editor {
         let type_id = std::any::TypeId::of::<W>();
         let ui_fn = Box::new(ui_fn::<W>);
         let menu_ui_fn = Box::new(menu_ui_fn::<W>);
+        let editor_menu_ui_fn = Box::new(editor_menu_ui_fn::<W>);
         let viewport_toolbar_ui_fn = Box::new(viewport_toolbar_ui_fn::<W>);
         let viewport_ui_fn = Box::new(viewport_ui_fn::<W>);
         let data = EditorWindowData {
             ui_fn,
             menu_ui_fn,
+            editor_menu_ui_fn,
             viewport_toolbar_ui_fn,
             viewport_ui_fn,
             name: W::NAME,
@@ -379,6 +389,14 @@ impl Editor {
                         (window.menu_ui_fn)(world, cx, ui);
                     }
                 });
+
+                for (&_, window) in self.windows.iter() {
+                    let cx = EditorWindowContext {
+                        window_states: &mut self.window_states,
+                        internal_state,
+                    };
+                    (window.editor_menu_ui_fn)(world, cx, ui);
+                }
             })
             .response;
             // .interact(egui::Sense::click());
