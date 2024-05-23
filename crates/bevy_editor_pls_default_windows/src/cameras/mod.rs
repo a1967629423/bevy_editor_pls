@@ -143,10 +143,12 @@ fn set_active_editor_camera_marker(world: &mut World, editor_cam: EditorCamKind)
     let mut previously_active_iter = previously_active.iter(world);
     let previously_active = previously_active_iter.next();
 
-    assert!(
-        previously_active_iter.next().is_none(),
-        "there should be only one `ActiveEditorCamera`"
-    );
+    let need_remove_active_entities = previously_active_iter.collect::<Vec<_>>();
+    
+    for entity in need_remove_active_entities {
+        bevy::log::warn!("there should be only one `ActiveEditorCamera`");
+        world.entity_mut(entity).remove::<ActiveEditorCamera>();
+    }
 
     if let Some(previously_active) = previously_active {
         world
